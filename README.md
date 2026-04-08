@@ -15,7 +15,7 @@ Sistema de riego y dispensador inteligente controlado vía web con ESP8266. Perm
 
 El proyecto nace de la necesidad de facilitar la vida a personas con huertos, jardines o pequeñas granjas que deben desplazarse diariamente para regar o alimentar a sus animales. Con este sistema, cualquier persona puede activar el riego o el dispensador desde cualquier lugar con conexión a Internet, o bien de forma automática según la temperatura ambiente.
 
-> 🚀 **Ideal para**: Hackatones, proyectos universitarios, agricultura urbana, jardinería inteligente y domótica de bajo coste.
+> 🚀 **Ideal para**: Agricultura urbana, jardinería inteligente y domótica de bajo coste.
 
 ---
 
