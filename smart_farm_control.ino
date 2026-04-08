@@ -3,7 +3,7 @@
  * 
  * Control remoto vía Adafruit IO, botón físico y automatización por temperatura.
  * 
- * Autor: Tu Nombre
+ * Autor: CeroCincoSiete
  * Proyecto para Hackatón
  * Licencia: MIT
  * 
