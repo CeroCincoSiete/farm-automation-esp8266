@@ -143,8 +143,8 @@ Proyecto desarrollado para Hackatón.
 
 ⭐ **Créditos**
 ---
-Adafruit IO
+-Adafruit IO
 
-Espressif
+-Espressif
 
-Comunidad open-source
+-Comunidad open-source
