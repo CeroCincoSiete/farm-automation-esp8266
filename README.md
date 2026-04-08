@@ -136,7 +136,7 @@ Calentar DHT11 > 30°C	Servo se abre automáticamente
 
 👨‍💻 **Autores**
 ---
-@CeroCincoSiete | @alvaromartinezmendez
+@CeroCincoSiete | @martinezmendezalv-hue
 
 Proyecto desarrollado para Hackatón.
 
