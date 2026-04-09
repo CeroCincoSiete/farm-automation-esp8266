@@ -123,6 +123,40 @@ Edita estas líneas en el archivo `.ino`:
 
 **Velocidad:** 115200
 
+## 🐛 Solución de problemas de subida: Instalación de drivers (para placas no originales)
+
+Si tu placa **no es original** (por ejemplo, un clon de NodeMCU), es muy probable que utilice el chip **CH340** para la comunicación USB. A veces, Windows no la reconoce automáticamente y necesitarás instalar el driver manualmente. Aquí te explicamos cómo hacerlo según tu sistema operativo.
+
+### 💻 Windows 10 / 11
+
+1. **Descarga el driver oficial** desde la página del fabricante (WCH) o desde este [enlace de respaldo](https://sparks.gogo.co.nz/ch340.html).
+2. **Descomprime** el archivo `.zip` descargado.
+3. **Ejecuta** el instalador (normalmente `CH341SER.EXE` o `SETUP_64.EXE`) como **Administrador** (clic derecho → "Ejecutar como administrador").
+4. Sigue las instrucciones del asistente.
+5. **Reinicia tu ordenador** y vuelve a conectar la placa.
+
+> **Nota para Windows 11:** Si el driver no funciona, prueba a instalar una **versión anterior** (por ejemplo, la v3.4 o v3.5), ya que a veces las más nuevas pueden ser incompatibles.
+
+### 🐧 Linux (Ubuntu / Linux Mint)
+
+¡Buenas noticias! El driver para el chip **CH340 ya viene incluido en el kernel de la mayoría de las distribuciones Linux actuales**.
+
+1. Conecta tu placa y el sistema debería reconocerla automáticamente.
+2. Para verificarlo, abre una terminal y ejecuta `lsusb`. Deberías ver una línea como `QinHeng Electronics HL-340 USB-Serial adapter`.
+3. Si por algún motivo no funciona, instala el driver manualmente desde el [repositorio oficial de WCH en GitHub](https://github.com/WCHSoftGroup/ch341ser_linux).
+
+### 🍎 macOS
+
+1. **Prueba primero sin instalar nada**: Algunas versiones de macOS ya incluyen un driver genérico. Conecta la placa y comprueba si aparece un nuevo puerto en el Arduino IDE.
+2. **Si no funciona, instala el driver oficial**:
+   - La forma más sencilla es usando **Homebrew**. Si no lo tienes, instálalo desde [brew.sh](https://brew.sh/).
+   - Abre la terminal y ejecuta:  
+     ```bash
+     brew install --cask wch-ch34x-usb-serial-driver
+   - Sigue las instrucciones en pantalla y reinicia tu Mac.
+
+   - Si el problema persiste, descarga el driver oficial del fabricante desde la web de WCH. Dentro del archivo .zip encontrarás un PDF con instrucciones detalladas para tu versión de macOS.
+
 Si falla la subida: Mantén presionado **FLASH**, presiona y suelta **RST**, luego suelta **FLASH**.
 
 🧪 **Pruebas**
