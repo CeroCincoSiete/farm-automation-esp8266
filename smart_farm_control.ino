@@ -1,43 +1,23 @@
-/*
- * Smart Farm Control - Riego y Dispensador Inteligente
- * 
- * Control remoto vía Adafruit IO, botón físico y automatización por temperatura.
- * 
- * Autor: CeroCincoSiete
- * Proyecto para Hackatón
- * Licencia: MIT
- * 
- * Componentes:
- * - ESP8266 (NodeMCU)
- * - Servomotor SG90/MG995
- * - Sensor DHT11
- * - Pulsador
- */
-
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
 #include <Servo.h>
 
 // ============================================
-//  CONFIGURACIÓN - ¡CAMBIA ESTOS VALORES!
+//  CONFIGURACIÓN - CAMBIA SÓLO ESTOS DATOS
 // ============================================
-
-// --- WiFi ---
-#define WLAN_SSID     "nombre_de_tu_wifi"     // <--- CAMBIA AQUÍ
-#define WLAN_PASS     "contraseña_de_tu_wifi" // <--- CAMBIA AQUÍ
-
-// --- Adafruit IO ---
-#define IO_USERNAME   "tu_usuario_adafruit"   // <--- CAMBIA AQUÍ
-#define IO_KEY        "tu_aio_key"            // <--- CAMBIA AQUÍ
+#define WLAN_SSID     "SSID"
+#define WLAN_PASS     "PASSWORD"
+#define IO_USERNAME   "USER ADAFRUIT IO"
+#define IO_KEY        "KEY ADAFRUIT IO"
 
 // ============================================
-//  CONFIGURACIÓN DE PINES
+//  PINES
 // ============================================
-#define SERVO_PIN     15     // GPIO15 (D8 en NodeMCU)
-#define DHTPIN        4      // GPIO4  (D2 en NodeMCU)
+#define SERVO_PIN     15
+#define DHTPIN        4
 #define DHTTYPE       DHT11
-#define BOTON_PIN     5      // GPIO5  (D1 en NodeMCU) - botón a GND
+#define BOTON_PIN     5
 
 // ============================================
 //  OBJETOS
@@ -48,31 +28,29 @@ WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
 // ============================================
-//  VARIABLES DE CONTROL
+//  VARIABLES
 // ============================================
 float temperaturaActual = 0;
-float limiteTemperatura = 30.0;   // Riego automático si supera 30°C
-bool servoCerrado = true;          // true=cerrado (0°), false=abierto (90°)
+float limiteTemperatura = 30.0;
+int anguloActual = 0;
 unsigned long lastTempRead = 0;
-const long tempReadInterval = 5000; // Leer temperatura cada 5 segundos
+const long tempReadInterval = 5000;
 
-// Variables para el botón (debounce)
-int lastButtonState = HIGH;
+// Variables para el botón
+bool botonPresionado = false;
 unsigned long lastDebounceTime = 0;
-const unsigned long debounceDelay = 50;
+const unsigned long debounceDelay = 200;
 
 // ============================================
-//  PROTOTIPOS DE FUNCIONES
+//  PROTOTIPOS
 // ============================================
-void connectWiFi();
-void connectMQTT();
-void mqttCallback(char* topic, byte* payload, unsigned int length);
-void abrirRiego(String origen);
-void cerrarRiego(String origen);
+void conectarWiFi();
+void conectarMQTT();
+void callbackMQTT(char* topic, byte* payload, unsigned int length);
+void moverServo(int angulo, String origen);
 void publicarMensaje(String texto);
 void leerTemperatura();
 void leerBoton();
-void handleServoCommand(String cmd);
 
 // ============================================
 //  SETUP
@@ -80,29 +58,24 @@ void handleServoCommand(String cmd);
 void setup() {
   Serial.begin(115200);
   delay(10);
+  Serial.println("\n--- SMART FARM CONTROL v3 (SIN BUCLES) ---");
 
   dht.begin();
   myServo.attach(SERVO_PIN);
-  myServo.write(0);          // Inicia cerrado
-  servoCerrado = true;
+  myServo.write(0);
+  anguloActual = 0;
 
   pinMode(BOTON_PIN, INPUT_PULLUP);
 
-  connectWiFi();
-  
+  conectarWiFi();
   mqtt.setServer("io.adafruit.com", 1883);
-  mqtt.setCallback(mqttCallback);
+  mqtt.setCallback(callbackMQTT);
   mqtt.setBufferSize(1024);
-  connectMQTT();
+  conectarMQTT();
 }
 
-// ============================================
-//  LOOP PRINCIPAL
-// ============================================
 void loop() {
-  if (!mqtt.connected()) {
-    connectMQTT();
-  }
+  if (!mqtt.connected()) conectarMQTT();
   mqtt.loop();
 
   leerTemperatura();
@@ -112,7 +85,7 @@ void loop() {
 // ============================================
 //  CONEXIONES
 // ============================================
-void connectWiFi() {
+void conectarWiFi() {
   Serial.print("Conectando a WiFi");
   WiFi.begin(WLAN_SSID, WLAN_PASS);
   while (WiFi.status() != WL_CONNECTED) {
@@ -122,23 +95,16 @@ void connectWiFi() {
   Serial.println("\nWiFi conectado! IP: " + WiFi.localIP().toString());
 }
 
-void connectMQTT() {
+void conectarMQTT() {
   while (!mqtt.connected()) {
     Serial.print("Conectando a Adafruit IO...");
-    
-    // Método connect con parámetros "will" (necesario para Adafruit)
-    if (mqtt.connect(IO_USERNAME, IO_USERNAME, IO_KEY, "", 0, 0, "")) {
+    if (mqtt.connect(IO_USERNAME, IO_USERNAME, IO_KEY)) {
       Serial.println("conectado!");
-      
-      // Suscripción al feed de control
       String topicControl = String(IO_USERNAME) + "/feeds/servo-control";
       mqtt.subscribe(topicControl.c_str());
       Serial.print("Suscrito a: ");
       Serial.println(topicControl);
-      
-      // Publicar mensaje de inicio
-      publicarMensaje("Sistema iniciado correctamente");
-      
+      publicarMensaje("Sistema iniciado (sin bucles)");
     } else {
       Serial.print("falló, rc=");
       Serial.print(mqtt.state());
@@ -149,74 +115,49 @@ void connectMQTT() {
 }
 
 // ============================================
-//  CALLBACK MQTT (cuando llega un mensaje)
+//  CALLBACK MQTT (recibe comandos remotos)
 // ============================================
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
+void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   String mensaje = "";
-  for (unsigned int i = 0; i < length; i++) {
-    mensaje += (char)payload[i];
-  }
-  Serial.print("Mensaje recibido en [");
-  Serial.print(topic);
-  Serial.print("]: ");
+  for (unsigned int i = 0; i < length; i++) mensaje += (char)payload[i];
+  Serial.print("Comando remoto recibido: ");
   Serial.println(mensaje);
-  
-  handleServoCommand(mensaje);
+
+  int angulo = mensaje.toInt();
+  if (angulo >= 0 && angulo <= 180) {
+    // El origen es "remoto" -> NO publicaremos de vuelta para evitar bucles
+    moverServo(angulo, "remoto");
+  } else {
+    Serial.println("Comando no válido: " + mensaje);
+  }
 }
 
 // ============================================
-//  CONTROL DEL SERVO (ABRIR/CERRAR)
+//  FUNCIÓN PRINCIPAL: mover servo y publicar SOLO si es local
 // ============================================
-void abrirRiego(String origen) {
-  if (servoCerrado) {
-    myServo.write(90);
-    servoCerrado = false;
-    Serial.println("RIEGO ABIERTO (servo a 90°)");
-    
-    String mensaje;
-    if (origen == "automatico") {
-      mensaje = "Riego automático por temperatura (" + String(temperaturaActual) + "°C)";
-    } else {
-      mensaje = "Riego activado desde " + origen;
-    }
-    publicarMensaje(mensaje);
-  } else {
-    Serial.println("El riego ya estaba abierto, no se hace nada");
+void moverServo(int angulo, String origen) {
+  // Evita movimientos redundantes
+  if (angulo == anguloActual) {
+    Serial.println("El servo ya está en " + String(angulo) + "°. No se mueve.");
+    return;
   }
-}
 
-void cerrarRiego(String origen) {
-  if (!servoCerrado) {
-    myServo.write(0);
-    servoCerrado = true;
-    Serial.println("RIEGO CERRADO (servo a 0°)");
-    
-    String mensaje = "Riego desactivado desde " + origen;
-    publicarMensaje(mensaje);
-  } else {
-    Serial.println("El riego ya estaba cerrado, no se hace nada");
-  }
-}
+  // Mueve el servo físicamente
+  myServo.write(angulo);
+  anguloActual = angulo;
+  Serial.println("Servo movido a " + String(angulo) + "° desde " + origen);
 
-void handleServoCommand(String cmd) {
-  cmd.toLowerCase();
-  if (cmd == "on" || cmd == "1") {
-    abrirRiego("remoto");
-  } 
-  else if (cmd == "off" || cmd == "0") {
-    cerrarRiego("remoto");
-  }
-  else {
-    // Si por error recibe un ángulo (ej. 90) lo interpreta
-    int angulo = cmd.toInt();
-    if (angulo >= 0 && angulo <= 180) {
-      myServo.write(angulo);
-      servoCerrado = (angulo == 0);
-      Serial.print("Servo movido a " + String(angulo) + " grados");
-      publicarMensaje("Servo movido a " + String(angulo) + "° desde comando");
-    } else {
-      Serial.println("Comando no reconocido: " + cmd);
-    }
+  // Publicar mensaje de texto en el feed estado-manual (siempre, para informar)
+  publicarMensaje("Servo movido a " + String(angulo) + "° desde " + origen);
+
+  // **CRUCIAL: Solo publicar el ángulo de vuelta si el origen es LOCAL**
+  // Si el origen es "remoto", NO publicamos para evitar el bucle.
+  if (origen == "boton" || origen == "automatico") {
+    String topicServo = String(IO_USERNAME) + "/feeds/servo-control";
+    mqtt.publish(topicServo.c_str(), String(angulo).c_str());
+    Serial.println("Ángulo " + String(angulo) + " publicado para sincronizar (origen local)");
+  } else {
+    Serial.println("Origen remoto: no se publica de vuelta para evitar bucle");
   }
 }
 
@@ -225,11 +166,10 @@ void handleServoCommand(String cmd) {
 // ============================================
 void publicarMensaje(String texto) {
   String topic = String(IO_USERNAME) + "/feeds/estado-manual";
-  if (mqtt.publish(topic.c_str(), texto.c_str())) {
+  if (mqtt.publish(topic.c_str(), texto.c_str()))
     Serial.println("Mensaje publicado: " + texto);
-  } else {
+  else
     Serial.println("Error al publicar mensaje");
-  }
 }
 
 // ============================================
@@ -244,39 +184,42 @@ void leerTemperatura() {
       Serial.print("Temperatura: ");
       Serial.print(temperaturaActual);
       Serial.println(" °C");
-      
-      // Publicar temperatura en Adafruit IO
-      String topic = String(IO_USERNAME) + "/feeds/temperatura";
-      mqtt.publish(topic.c_str(), String(temperaturaActual).c_str());
-      
-      // Automatización por temperatura: si supera el límite Y el servo está cerrado, lo abre
-      if (temperaturaActual > limiteTemperatura && servoCerrado) {
-        Serial.println("Temperatura alta -> abriendo riego automáticamente");
-        abrirRiego("automatico");
+
+      String topicTemp = String(IO_USERNAME) + "/feeds/temperatura";
+      mqtt.publish(topicTemp.c_str(), String(temperaturaActual).c_str());
+
+      if (temperaturaActual > limiteTemperatura && anguloActual == 0) {
+        Serial.println("Temperatura alta, abriendo riego automático");
+        moverServo(90, "automatico");
       }
     } else {
-      Serial.println("Error leyendo el sensor DHT11");
+      Serial.println("Error DHT11");
     }
   }
 }
 
 // ============================================
-//  LECTURA DEL BOTÓN FÍSICO (TOGGLE)
+//  BOTÓN FÍSICO (alterna entre 0 y 90 grados)
 // ============================================
 void leerBoton() {
-  int reading = digitalRead(BOTON_PIN);
-  if (reading != lastButtonState) {
-    lastDebounceTime = millis();
-  }
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    if (reading == LOW && lastButtonState == HIGH) {
-      Serial.println("Botón físico presionado -> alternando estado");
-      if (servoCerrado) {
-        abrirRiego("manual");
+  int lectura = digitalRead(BOTON_PIN);
+
+  if (lectura == LOW && !botonPresionado) {
+    if ((millis() - lastDebounceTime) > debounceDelay) {
+      botonPresionado = true;
+      lastDebounceTime = millis();
+      Serial.println("Botón presionado - alternando servo");
+      if (anguloActual == 0) {
+        moverServo(90, "boton");
       } else {
-        cerrarRiego("manual");
+        moverServo(0, "boton");
       }
     }
   }
-  lastButtonState = reading;
+  else if (lectura == HIGH && botonPresionado) {
+    if ((millis() - lastDebounceTime) > debounceDelay) {
+      botonPresionado = false;
+      lastDebounceTime = millis();
+    }
+  }
 }
