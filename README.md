@@ -1,21 +1,34 @@
 PROYECTO CIBERGU 2026 | EQUIPO V.A
 -------------------------------------
-Sistema de riego y dispensador inteligente controlado vía web con ESP8266. Permite activar el riego remotamente desde Adafruit IO, mediante botón físico o automáticamente por temperatura. Ideal para huertos y granjas. Bajo costo y fácil de implementar.
+Sistema de riego y dispensador inteligente controlado vía web con ESP8266.  
+Permite activar el riego remotamente desde Adafruit IO, mediante botón físico o automáticamente por temperatura.  
+Incluye apagado automático tras 12 segundos, protección contra ciclos repetitivos, sincronización en tiempo real y robustez frente a caídas de red.  
+Ideal para huertos y granjas. Bajo costo y fácil de implementar.
 -------------------------------------
-# 🌱 Farm Automation Esp8266 - Riego y Dispensador Inteligente
 
-![Versión](https://img.shields.io/badge/versión-1.0.0-blue)
+# 🌱 Farm Automation ESP8266 - Riego y Dispensador Inteligente
+
+![Versión](https://img.shields.io/badge/versión-2.0.0-blue)
 ![ESP8266](https://img.shields.io/badge/Placa-ESP8266-orange)
 ![MQTT](https://img.shields.io/badge/Protocolo-MQTT-ff69b4)
 ![Adafruit IO](https://img.shields.io/badge/Cloud-Adafruit%20IO-green)
+![Seguridad](https://img.shields.io/badge/Seguridad-Anti--DoS%20%7C%20Watchdog-red)
 
 ## 📖 Descripción del Proyecto
 
-**farm-automation-esp8266** es una solución de automatización de bajo costo para el sector agrícola y doméstico. Permite controlar de forma remota un sistema de riego o un dispensador de pienso utilizando una placa **ESP8266 (NodeMCU)**, un servomotor, un sensor de temperatura DHT11 y un botón físico para control manual.
+**Farm Automation ESP8266** es una solución de automatización de bajo costo para el sector agrícola y doméstico. Controla un sistema de riego o dispensador de pienso mediante:
 
-El proyecto nace de la necesidad de facilitar la vida a personas con huertos, jardines o pequeñas granjas que deben desplazarse diariamente para regar o alimentar a sus animales. Con este sistema, cualquier persona puede activar el riego o el dispensador desde cualquier lugar con conexión a Internet, o bien de forma automática según la temperatura ambiente.
+- **Control remoto** desde cualquier lugar (Adafruit IO).
+- **Botón físico** para actuación local.
+- **Automático por temperatura** (umbral 30°C).
+- **Apagado automático de seguridad** a los 12 segundos de apertura (evita olvidos).
+- **Sincronización total** entre el dashboard web (toggle + slider) y el estado real del servo.
+- **Protección anti‑rebote y anti‑DoS** (límite de comandos por segundo).
+- **Watchdog de software** que reinicia la placa si el programa se bloquea.
 
-> 🚀 **Ideal para**: Agricultura urbana, jardinería inteligente y domótica de bajo coste.
+El sistema está pensado para **ahorrar tiempo, agua y energía**, ofreciendo flexibilidad tanto en campo como desde casa.
+
+> 🚀 **Ideal para**: Agricultura urbana, jardinería inteligente, domótica de bajo coste y hackatones.
 
 ---
 
@@ -23,24 +36,31 @@ El proyecto nace de la necesidad de facilitar la vida a personas con huertos, ja
 
 | Característica | Descripción |
 |----------------|-------------|
-| 🌍 **Control remoto** | Desde cualquier lugar mediante un dashboard en Adafruit IO |
-| 🔘 **Control manual** | Botón físico para activar/desactivar el sistema localmente |
-| 🌡️ **Automatización por temperatura** | Se activa automáticamente si la temperatura supera un umbral configurable |
-| ⏰ **Programación horaria** | Permite programar acciones a horas específicas desde Adafruit IO |
-| 📢 **Notificaciones visuales** | Mensajes de confirmación en tiempo real en el dashboard |
-| 🔌 **Bajo costo** | Componentes económicos y fáciles de conseguir |
-| 📡 **Conexión WiFi** | Utiliza la red doméstica para conectarse a Internet |
+| 🌍 **Control remoto** | Desde cualquier lugar mediante dashboard en Adafruit IO (toggle y slider sincronizados). |
+| 🔘 **Control manual local** | Botón físico (D1) que alterna el estado del servo (0° ↔ 90°). |
+| 🌡️ **Automatización por temperatura** | Al superar 30°C, el servo se abre automáticamente (si no lo está ya). |
+| ⏱️ **Apagado automático de seguridad** | El servo se cierra automáticamente tras **12 segundos** abierto (evita riego o dispensado continuo). |
+| 🔄 **Protección contra reactivación inmediata** | Una vez que el sistema se abre por calor y se cierra por tiempo, no se vuelve a abrir hasta que la temperatura baje del umbral y vuelva a superarlo (evita ciclos infinitos). |
+| 📢 **Notificaciones en tiempo real** | Cada acción publica un mensaje en el feed `estado-manual` (ej: "Riego activado desde botón"). |
+| 🔄 **Sincronización bidireccional** | Cualquier cambio local (botón, temporizador, temperatura) actualiza el slider y el toggle en Adafruit IO. |
+| 🛡️ **Medidas de seguridad** | Anti‑DoS (1 comando/segundo), watchdog de 5 segundos, cierre automático por pérdida de conexión (>30s sin WiFi/MQTT). |
+| 🔌 **Bajo costo** | Componentes económicos (< 35 €) y fácilmente disponibles. |
 
 ---
 
-## 🧠 Lógica de Funcionamiento
+## 🧠 Lógica de Funcionamiento (versión actual)
 
-1. La placa **ESP8266** se conecta a la red WiFi y al servidor MQTT de **Adafruit IO**.
-2. Escucha constantemente el feed `servo-control` para recibir comandos `ON`/`OFF`.
-3. Lee el **sensor DHT11** cada 5 segundos y publica la temperatura en el feed `temperatura`.
-4. Si la temperatura supera los **30°C**, activa automáticamente el riego.
-5. El **botón físico** permite alternar el estado del sistema localmente.
-6. Cada acción (manual, remota o automática) publica un mensaje en el feed `estado-manual`.
+1. **Conexión** → La ESP8266 se conecta al WiFi y al broker MQTT de Adafruit IO.
+2. **Escucha remota** → Suscrita al feed `servo-control` para recibir ángulos (0‑180) desde el toggle o slider.
+3. **Lectura de temperatura** → Cada 5 segundos lee el DHT11 y publica el valor en el feed `temperatura`.
+4. **Automatización por calor** → Si la temperatura > 30°C **y** el servo está cerrado **y** no se ha acabado de activar hace menos de 60 segundos (cooldown), se abre el servo (90°).
+5. **Apagado automático** → Cuando el servo está abierto, se comprueba continuamente si han pasado **12 segundos**. Si es así, se cierra (0°).
+6. **Sincronización** → Solo los movimientos **locales** (botón, temporizador, automático por calor, pérdida de conexión) publican el nuevo ángulo al feed `servo-control`, actualizando el dashboard. Los comandos remotos no publican de vuelta, evitando bucles.
+7. **Protecciones**:
+   - **Anti‑DoS**: máximo 1 comando MQTT por segundo.
+   - **Watchdog**: si el bucle principal se bloquea más de 5 segundos, la placa se reinicia.
+   - **Caída de conexión**: si se pierde WiFi o MQTT durante más de 30 segundos, se cierra el servo.
+   - **Cooldown térmico**: después de un cierre por temporizador, se evita una nueva activación por calor durante 60 segundos.
 
 ---
 
@@ -74,13 +94,13 @@ El proyecto nace de la necesidad de facilitar la vida a personas con huertos, ja
 | Botón (señal) | GPIO5 | D1 |
 | Botón (GND) | GND | - |
 
+> **Nota:** El botón no necesita resistencia externa porque se usa la resistencia pull‑up interna de la ESP8266.
+
 ---
-**Nota:** El botón no necesita resistencia externa porque se usa la resistencia pull-up interna de la placa.
 
 ## 🚀 Configuración
 
 ### 1. Arduino IDE
-
 Agrega la siguiente URL en Preferencias → Gestor de URLs adicionales: https://arduino.esp8266.com/stable/package_esp8266com_index.json
 Instala el paquete **esp8266** desde el Gestor de Tarjetas.
 
@@ -159,26 +179,36 @@ Si tu placa **no es original** (por ejemplo, un clon de NodeMCU), es muy probabl
 
 Si falla la subida: Mantén presionado **FLASH**, presiona y suelta **RST**, luego suelta **FLASH**.
 
-🧪 **Pruebas**
+🧪 Pruebas y verificación
 ---
-Acción	Resultado esperado
-Encender placa	Monitor serie muestra IP
-Enviar ON desde dashboard	Servo gira a 90°
-Enviar OFF desde dashboard	Servo vuelve a 0°
-Presionar botón físico	Alterna estado del servo
-Calentar DHT11 > 30°C	Servo se abre automáticamente
+| Acción | Resultado esperado |
+|--------|--------------------|
+| Encender la placa | El monitor serie muestra la IP y "Sistema listo". |
+| Enviar `ON` (toggle) desde dashboard | Servo gira a 90° y el slider se mueve a 90°. |
+| Enviar `OFF` desde dashboard | Servo vuelve a 0° y el slider se mueve a 0°. |
+| Mover el slider a un ángulo (ej. 45°) | Servo se mueve a 45°, toggle se pone en ON. |
+| Presionar el botón físico (D1) | Alterna entre 0° y 90°, actualizando toggle y slider. |
+| Calentar el sensor DHT11 > 30°C | El servo se abre (90°). Si sigue caliente, tras 12 segundos se cierra y no se reabre inmediatamente (cooldown de 60s). |
+| Desconectar el WiFi (o perder conexión MQTT) | El servo se cierra por seguridad. Al reconectar, el dashboard se sincroniza. |
+| Mantener el servo abierto más de 12 segundos | Se cierra automáticamente y el dashboard se actualiza a OFF/0°. |
+| Enviar comandos muy rápido (más de 1 por segundo) | El sistema ignora los comandos extra (protección anti-DoS). |
+| Bloquear el programa (simulación) | El watchdog reinicia la placa automáticamente. |
 
-👨‍💻 **Autores**
+👨‍💻 Autores
 ---
-@CeroCincoSiete | @martinezmendezalv-hue
+- @CeroCincoSiete
+- @martinezmendezalv-hue
 
-Proyecto desarrollado para Hackatón.
+Proyecto desarrollado para la Hackatón CIBERGU 2026.
 
-
-⭐ **Créditos**
+⭐ Créditos
 ---
--Adafruit IO
+  -  Adafruit IO – plataforma MQTT y dashboards.
 
--Espressif
+  - Espressif – por el ESP8266.
 
--Comunidad open-source
+  - Comunidad open‑source por las librerías utilizadas.
+
+📄 Licencia
+
+MIT License – ver archivo LICENSE.
